@@ -2,6 +2,8 @@ import json
 from pyangbind.lib import pybindJSON, xpathhelper
 import ocbind
 
+from hackathon.utils.gnmi import GNMIClient
+
 
 def _create_interface(name, description):
     path = f'/interfaces/interface[name={name}]'
@@ -108,3 +110,18 @@ def create_bgp_neighbor(neighbor_ip, neighbor_as, description):
     path = '/network-instances/network-instance[name=default]/protocols/protocol[name=BGP]/bgp/neighbors/neighbor'
     path = f'{path}[neighbor-address={neighbor_ip}]'
     return path, neighbor_ip, pybindJSON.dumps(neighbor, mode='ietf')
+
+
+def validate_neighbor(host, expected_remote_host, expected_remote_port):
+    client = GNMIClient(host)
+    output = client.get('/lldp/interfaces')
+    interfaces = output[0]['updates'][0]['values']['lldp/interfaces']['openconfig-lldp:interface']
+    neighbors = list()
+    for intf in interfaces:
+        if 'neighbors' in intf:
+            for neighbor in intf['neighbors']['neighbor']:
+                neighbors.append((neighbor['state']['system-name'], neighbor['state']['port-id']))
+
+    if (expected_remote_host, expected_remote_port) in neighbors:
+        return True
+    return False

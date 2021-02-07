@@ -2,6 +2,7 @@ import subprocess
 import logging
 import os
 import tempfile
+import json
 
 
 class GNMIClient:
@@ -19,7 +20,8 @@ class GNMIClient:
 
     def get(self, path):
         args = self.base_args + ['get', '--path', path]
-        return self._run(args)
+        output = self._run(args)
+        return json.loads(output)
 
     def set(self, path, value):
         self.logger.debug(value)

@@ -1,10 +1,14 @@
 """Miscellaneous tasks."""
+import logging
+
 from netaddr import AddrFormatError, IPNetwork
 
 from hackathon.models import get_session
 from hackathon.models.device import DeviceModel, ValidationError
 from hackathon.models.util import session_write
+from hackathon.utils.openconfig import validate_neighbor
 
+LOG = logging.getLogger(__name__)
 
 @session_write
 def initialize_lab(include_tor2=False, session=None):
@@ -165,6 +169,17 @@ def provision_tor(hostname, management_ip, asn, cross_connect_net, core_hostname
             remote_port='Ethernet1',
             ip_address=core_net,
         )
+
+        # Validate LLDP
+        if validate_neighbor(tor.management_ip, core_hostname, core_port):
+            LOG.debug('TOR LLDP Neighbor confirmed')
+        else:
+            LOG.error('TOR LLDP Validation Failed')
+
+        if validate_neighbor(core.management_ip, hostname, 'Ethernet1'):
+            LOG.debug('Core LLDP Neighbor confirmed')
+        else:
+            LOG.error('Core LLDP Validation Failed')
 
         # Add BGP Neighbors
         tor.add_bgp_neighbor(
