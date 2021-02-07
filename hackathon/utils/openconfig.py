@@ -112,7 +112,7 @@ def create_bgp_neighbor(neighbor_ip, neighbor_as, description):
     return path, neighbor_ip, pybindJSON.dumps(neighbor, mode='ietf')
 
 
-def validate_neighbor(host, expected_remote_host, expected_remote_port):
+def validate_lldp_neighbor(host, expected_remote_host, expected_remote_port):
     client = GNMIClient(host)
     output = client.get('/lldp/interfaces')
     interfaces = output[0]['updates'][0]['values']['lldp/interfaces']['openconfig-lldp:interface']
@@ -122,6 +122,16 @@ def validate_neighbor(host, expected_remote_host, expected_remote_port):
             for neighbor in intf['neighbors']['neighbor']:
                 neighbors.append((neighbor['state']['system-name'], neighbor['state']['port-id']))
 
-    if (expected_remote_host, expected_remote_port) in neighbors:
-        return True
-    return False
+    return (expected_remote_host, expected_remote_port) in neighbors
+
+
+def validate_bgp_state(host, neighbor_ip):
+    client = GNMIClient(host)
+
+    path = '/network-instances/network-instance[name=default]/protocols/protocol[name=BGP]/bgp/neighbors/' \
+           f'neighbor[neighbor-address={neighbor_ip}]/state'
+
+    output = client.get(path)
+    neighbor = output[0]['updates'][0]['values'][
+        'network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/state']
+    return neighbor['openconfig-network-instance:session-state'] == 'ESTABLISHED'

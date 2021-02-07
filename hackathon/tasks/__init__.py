@@ -6,7 +6,7 @@ from netaddr import AddrFormatError, IPNetwork
 from hackathon.models import get_session
 from hackathon.models.device import DeviceModel, ValidationError
 from hackathon.models.util import session_write
-from hackathon.utils.openconfig import validate_neighbor
+from hackathon.utils.openconfig import validate_bgp_state, validate_lldp_neighbor
 
 LOG = logging.getLogger(__name__)
 
@@ -170,13 +170,16 @@ def provision_tor(hostname, management_ip, asn, cross_connect_net, core_hostname
             ip_address=core_net,
         )
 
+        tor.sync()
+        core.sync()
+
         # Validate LLDP
-        if validate_neighbor(tor.management_ip, core_hostname, core_port):
+        if validate_lldp_neighbor(tor.management_ip, core_hostname, core_port):
             LOG.debug('TOR LLDP Neighbor confirmed')
         else:
             LOG.error('TOR LLDP Validation Failed')
 
-        if validate_neighbor(core.management_ip, hostname, 'Ethernet1'):
+        if validate_lldp_neighbor(core.management_ip, hostname, 'Ethernet1'):
             LOG.debug('Core LLDP Neighbor confirmed')
         else:
             LOG.error('Core LLDP Validation Failed')
@@ -197,6 +200,13 @@ def provision_tor(hostname, management_ip, asn, cross_connect_net, core_hostname
         # Sync config on both devices
         tor.sync()
         core.sync()
+
+        # Validate BGP
+        if validate_bgp_state(tor.management_ip, core_ip):
+            LOG.debug('BGP Established')
+        else:
+            LOG.debug('BGP Not Established')
+
     except Exception as exc:
         session.rollback()
         # Resync affected device after rollback
