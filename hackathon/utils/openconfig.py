@@ -10,6 +10,7 @@ def _create_interface(name, description):
     intf_model.interfaces.interface.add(name)
     intf = intf_model.interfaces.interface[name]
 
+    intf.config.name = name
     intf.config.description = description
     intf.config.enabled = 'true'
     return path, intf
@@ -38,10 +39,20 @@ def create_p2p_interface(name, description, ip, prefixlen):
 def create_svi(num, description, ip, prefixlen):
     name = f'Vlan{num}'
     path, intf = _create_interface(name, description)
-    intf.routed_vlan.config.vlan = num
+    intf.config.type = 'iana-if-type:l3ipvlan'
+    intf.routed_vlan.config.vlan = f'Vlan{num}'
+    intf.routed_vlan.ipv4.config.enabled = 'true'
     intf.routed_vlan.ipv4.addresses.address.add(ip)
-    intf.routed_vlan.ipv4.addresses.address[ip].config.prefix_length = prefixlen
-    return path, name, pybindJSON.dumps(intf, mode='ietf')
+    v4_addr = intf.routed_vlan.ipv4.addresses.address[ip]
+    v4_addr.config.ip = ip
+    v4_addr.config.prefix_length = prefixlen
+
+    schema = json.loads(pybindJSON.dumps(intf, mode='ietf'))
+    # Arista needs an augment, hacking it in
+    for address in schema['openconfig-vlan:routed-vlan']['openconfig-if-ip:ipv4']['addresses']['address']:
+        address['config']['arista-intf-augments:addr-type'] = 'PRIMARY'
+
+    return path, name, json.dumps(schema, indent=4)
 
 
 def create_access_interface(name, description, vlan):
@@ -50,14 +61,41 @@ def create_access_interface(name, description, vlan):
     return path, name, pybindJSON.dumps(intf, mode='ietf')
 
 
+def initialize_bgp(asn):
+    ph = xpathhelper.YANGPathHelper()
+    bgp_model = ocbind.openconfig_bgp(path_helper=ph).bgp
+
+    path = '/network-instances/network-instance[name=default]/protocols/protocol[name=BGP]/bgp/global/config'
+    bgp_model.global_.config.as_ = asn
+
+    return path, 'asn', pybindJSON.dumps(bgp_model.global_.config, mode='ietf')
+
+
+def redistribute_connected_bgp():
+    path = 'network-instances/network-instance[name=default]/table-connections/'
+    ph = xpathhelper.YANGPathHelper()
+    netinst = ocbind.openconfig_network_instance(path_helper=ph)
+    netinst = netinst.network_instances.network_instance.add('default')
+
+    key = ['openconfig-policy-types:DIRECTLY_CONNECTED', 'openconfig-policy-types:BGP', 'openconfig-types:IPV4']
+    connections = netinst.table_connections
+    tcv4 = connections.table_connection.add(' '.join(key))
+    tcv4.config.address_family = key[2]
+    tcv4.config.dst_protocol = key[1]
+    tcv4.config.src_protocol = key[0]
+
+    key[2] = 'openconfig-types:IPV6'
+    tcv6 = connections.table_connection.add(' '.join(key))
+    tcv6.config.address_family = key[2]
+    tcv6.config.dst_protocol = key[1]
+    tcv6.config.src_protocol = key[0]
+
+    return path, 'redistribute_connected', pybindJSON.dumps(connections, mode='ietf')
+
+
 def create_bgp_neighbor(neighbor_ip, neighbor_as, description):
     ph = xpathhelper.YANGPathHelper()
-    # Drill down to BGP neighbor model
-    network_instances = ocbind.openconfig_network_instance(path_helper=ph)
-    network_instances.network_instances.network_instance.add('default')
-    network_instance = network_instances.network_instances.network_instance['default']
-    network_instance.protocols.protocol.add('BGP BGP')
-    bgp_model = network_instance.protocols.protocol['BGP BGP'].bgp
+    bgp_model = ocbind.openconfig_bgp(path_helper=ph).bgp
 
     # Create neighbor
     bgp_model.neighbors.neighbor.add(neighbor_ip)

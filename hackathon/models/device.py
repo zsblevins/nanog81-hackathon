@@ -4,9 +4,11 @@ from netaddr import AddrFormatError, IPAddress
 from sqlalchemy import Column, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
-from hackathon.models import Base, session
+from hackathon.models import Base
+from hackathon.models.util import session_read, session_write
 from hackathon.utils.gnmi import GNMIClient
-from hackathon.utils.openconfig import create_access_interface, create_bgp_neighbor, create_p2p_interface, create_svi
+from hackathon.utils.openconfig import create_access_interface, create_bgp_neighbor, create_p2p_interface, create_svi, \
+    initialize_bgp, redistribute_connected_bgp
 
 
 class ValidationError(Exception):
@@ -24,7 +26,8 @@ class DeviceModel(Base):  # type: ignore
     configs = relationship("ConfigModel")
 
     @staticmethod
-    def create(hostname, management_ip, role):
+    @session_write
+    def create(hostname, management_ip, role, session=None):
         """Create a new device."""
         try:
             IPAddress(management_ip)
@@ -32,82 +35,90 @@ class DeviceModel(Base):  # type: ignore
             raise ValidationError('Invalid management IP')
         device = DeviceModel(hostname=hostname, management_ip=management_ip, role=role)
         session.add(device)
-        session.commit()
+        return device
 
     def neighbors(self):
-        return {config.key: config.schema for config in self.configs.all() if 'BGP' in config.path}
+        return {config.key: config.schema for config in self.configs if 'BGP' in config.path}
 
     def interfaces(self):
-        return {config.key: config.schema for config in self.configs.all() if 'interfaces' in config.path}
+        return {config.key: config.schema for config in self.configs if 'interfaces' in config.path}
 
     def vlans(self):
-        return {config.key: config.schema for config in self.configs.all() if config.key.startswith('Vlan')}
+        return {config.key: config.schema for config in self.configs if config.key.startswith('Vlan')}
 
     @staticmethod
-    def get(device_id):
-        return session.query(DeviceModel).get(device_id)
+    @session_read
+    def get(device_id=None, hostname=None, session=None):
+        if device_id:
+            return session.query(DeviceModel).get(device_id)
+        else:
+            return session.query(DeviceModel).filter_by(hostname=hostname).first()
 
     @staticmethod
-    def all():
+    @session_read
+    def all(session=None):
         return session.query(DeviceModel).all()
 
-    @staticmethod
-    def add_p2p_interface(hostname, name, remote_host, remote_port, ip_address):
-        device = session.query(DeviceModel).filter_by(hostname=hostname).first()
+    def add_p2p_interface(self, name, remote_host, remote_port, ip_address):
         description = f'{remote_host} {remote_port}'
         ip, prefixlen = ip_address.split('/')
         path, key, schema = create_p2p_interface(name, description, ip, prefixlen)
-        session.merge(ConfigModel(
-            device=device,
+        self.configs.append(ConfigModel(
+            device=self,
             path=path,
             key=key,
             schema=schema
         ))
-        session.commit()
 
-    @staticmethod
-    def add_vlan(hostname, num, description, ip_address):
-        device = session.query(DeviceModel).filter_by(hostname=hostname).first()
+    def add_vlan(self, num, description, ip_address):
         ip, prefixlen = ip_address.split('/')
         path, key, schema = create_svi(num, description, ip, prefixlen)
-        session.merge(ConfigModel(
-            device=device,
+        self.configs.append(ConfigModel(
+            device=self,
             path=path,
             key=key,
             schema=schema
         ))
-        session.commit()
 
-    @staticmethod
-    def add_access_port(hostname, name, vlan, description=None):
-        device = session.query(DeviceModel).filter_by(hostname=hostname).first()
+    def add_access_port(self, name, vlan, description=None):
         description = description or "HOST"
         path, key, schema = create_access_interface(name, description, vlan)
-        session.merge(ConfigModel(
-            device=device,
+        self.configs.append(ConfigModel(
+            device=self,
             path=path,
             key=key,
             schema=schema
         ))
-        session.commit()
 
-    @staticmethod
-    def add_bgp_neighbor(hostname, neighbor_ip, neighbor_as, neighbor_hostname):
-        device = session.query(DeviceModel).filter_by(hostname=hostname).first()
+    def initialize_bgp(self, asn):
+        path, key, schema = initialize_bgp(asn)
+        self.configs.append(ConfigModel(
+            device=self,
+            path=path,
+            key=key,
+            schema=schema
+        ))
+
+        path, key, schema = redistribute_connected_bgp()
+        self.configs.append(ConfigModel(
+            device=self,
+            path=path,
+            key=key,
+            schema=schema
+        ))
+
+    def add_bgp_neighbor(self, neighbor_ip, neighbor_as, neighbor_hostname):
         path, key, schema = create_bgp_neighbor(neighbor_ip, neighbor_as, neighbor_hostname)
-        session.merge(ConfigModel(
-            device=device,
+        self.configs.append(ConfigModel(
+            device=self,
             path=path,
             key=key,
             schema=schema
         ))
-        session.commit()
 
-    @staticmethod
-    def sync(hostname):
-        device = session.query(DeviceModel).filter_by(hostname=hostname).first()
-        client = GNMIClient(host=device.management_ip)
-        for config in device.configs:
+    def sync(self):
+        client = GNMIClient(host=self.management_ip)
+        for config in self.configs:
             client.set(config.path, config.schema)
 
 

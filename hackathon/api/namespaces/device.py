@@ -1,9 +1,9 @@
 """Config namespace."""
 
 from flask_restx import Namespace, Resource, fields  # type: ignore
-from netaddr import IPNetwork
 
 from hackathon.models.device import DeviceModel, ValidationError
+from hackathon.tasks import add_vlan, provision_tor, update_access_port
 
 api = Namespace("device", description="Device operations")
 
@@ -57,50 +57,54 @@ provision_tor_model = api.model(
 class ProvisionTOR(Resource):
     @api.expect(provision_tor_model, validate=True)
     def post(self):
-        # Create TOR
-        DeviceModel.create(hostname=api.payload['hostname'], management_ip=api.payload['management_ip'], role='tor')
+        """Provision a new TOR device."""
+        try:
+            provision_tor(**api.payload)
+            return 201
+        except ValidationError as e:
+            api.abort(400, e)
 
-        p2p_prefix = IPNetwork(api.payload['cross_connect_net'])
-        if p2p_prefix.prefixlen != 31:
-            api.abort(400, 'Expected a /31 for the cross connect')
 
-        core_ip = str(p2p_prefix[0])
-        core_net = f'{p2p_prefix[0]}/31'
-        tor_ip = str(p2p_prefix[1])
-        tor_net = f'{p2p_prefix[1]}/31'
+add_vlan_model = api.model(
+    "AddVLAN",
+    {
+        "hostname": fields.String(required=True, description="TOR hostname"),
+        "num": fields.Integer(required=True, description="VLAN Number"),
+        "prefix": fields.String(required=True, description="VLAN IPv4 Prefix"),
+        "description": fields.String(required=True, description="VLAN Description")
+    }
+)
 
-        # Add P2P links on both devices
-        DeviceModel.add_p2p_interface(
-            hostname=api.payload['hostname'],
-            name='Ethernet1',
-            remote_host=api.payload['core_hostname'],
-            remote_port=api.payload['core_port'],
-            ip_address=tor_net
-        )
 
-        DeviceModel.add_p2p_interface(
-            hostname=api.payload['core_hostname'],
-            name=api.payload['core_port'],
-            remote_host=api.payload['hostname'],
-            remote_port='Ethernet1',
-            ip_address=core_net
-        )
+@api.route("/add_vlan")
+class AddVLAN(Resource):
+    @api.expect(add_vlan_model, validate=True)
+    def post(self):
+        """Add a new SVI to a device."""
+        try:
+            add_vlan(**api.payload)
+            return 201
+        except ValidationError as e:
+            api.abort(400, e)
 
-        # Add BGP Neighbors
-        DeviceModel.add_bgp_neighbor(
-            hostname=api.payload['hostname'],
-            neighbor_ip=core_ip,
-            neighbor_as=64512,
-            neighbor_hostname=api.payload['core_hostname']
-        )
 
-        DeviceModel.add_bgp_neighbor(
-            hostname=api.payload['core_hostname'],
-            neighbor_ip=tor_ip,
-            neighbor_as=api.payload['asn'],
-            neighbor_hostname=api.payload['hostname']
-        )
+port_flip_model = api.model(
+    "EditAccessVlan",
+    {
+        "hostname": fields.String(required=True, description="TOR hostname"),
+        "vlan": fields.Integer(required=True, description="Access VLAN"),
+        "port": fields.String(required=True, description="Access Port"),
+        "description": fields.String(required=False, description="Port Description")
+    }
+)
 
-        # Sync config on both devices
-        DeviceModel.sync(api.payload['hostname'])
-        DeviceModel.sync(api.payload['core_hostname'])
+@api.route("/set_access_vlan")
+class EditAccessVLAN(Resource):
+    @api.expect(port_flip_model, validate=True)
+    def post(self):
+        """Set VLAN on Access Port."""
+        try:
+            update_access_port(**api.payload)
+            return 201
+        except ValidationError as e:
+            api.abort(400, e)
