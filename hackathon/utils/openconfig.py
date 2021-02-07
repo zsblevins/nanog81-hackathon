@@ -39,7 +39,7 @@ def create_p2p_interface(name, description, ip, prefixlen):
 def create_svi(num, description, ip, prefixlen):
     name = f'Vlan{num}'
     path, intf = _create_interface(name, description)
-    intf.config.type = 'iana-if-type:l3ipvlan'
+    intf.config.type = 'l3ipvlan'
     intf.routed_vlan.config.vlan = f'Vlan{num}'
     intf.routed_vlan.ipv4.config.enabled = 'true'
     intf.routed_vlan.ipv4.addresses.address.add(ip)

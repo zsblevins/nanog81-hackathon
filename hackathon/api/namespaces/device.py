@@ -7,6 +7,15 @@ from hackathon.tasks import add_vlan, provision_tor, update_access_port
 
 api = Namespace("device", description="Device operations")
 
+config_model = api.model(
+    "Config",
+    {
+        "path": fields.String(required=True, description="OpenConfig Path"),
+        "key": fields.String(required=True, description="Short key"),
+        "schema": fields.String(required=True, description="OpenConfig Value")
+    }
+)
+
 device_model = api.model(
     "Device",
     {
@@ -16,6 +25,7 @@ device_model = api.model(
         "hostname": fields.String(required=True, description="Device hostname"),
         "role": fields.String(required=True, description="Device role"),
         "management_ip": fields.String(required=True, description="Device management IP"),
+        "configs": fields.List(fields.Nested(config_model))
     },
 )
 
@@ -97,6 +107,7 @@ port_flip_model = api.model(
         "description": fields.String(required=False, description="Port Description")
     }
 )
+
 
 @api.route("/set_access_vlan")
 class EditAccessVLAN(Resource):

@@ -2,7 +2,7 @@
 
 from netaddr import AddrFormatError, IPAddress
 from sqlalchemy import Column, Enum, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, selectinload
 
 from hackathon.models import Base
 from hackathon.models.util import session_read, session_write
@@ -57,7 +57,7 @@ class DeviceModel(Base):  # type: ignore
     @staticmethod
     @session_read
     def all(session=None):
-        return session.query(DeviceModel).all()
+        return session.query(DeviceModel).options(selectinload(DeviceModel.configs)).all()
 
     def add_p2p_interface(self, name, remote_host, remote_port, ip_address):
         description = f'{remote_host} {remote_port}'
