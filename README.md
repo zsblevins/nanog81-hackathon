@@ -1,5 +1,25 @@
 # nanog81-hackathon
 
+   * [nanog81-hackathon](#nanog81-hackathon)
+      * [Setup](#setup)
+         * [PyangBind](#pyangbind)
+         * [gNMIc](#gnmic)
+         * [API Requirements](#api-requirements)
+      * [Run the API](#run-the-api)
+      * [My Lab Environment](#my-lab-environment)
+      * [API](#api)
+         * [Provision TOR](#provision-tor)
+         * [Add VLAN](#add-vlan)
+         * [Edit Access Port](#edit-access-port)
+      * [OpenConfig gNMIc Examples](#openconfig-gnmic-examples)
+         * [Configure BGP ASN](#configure-bgp-asn)
+         * [Redistribute Connected Routes](#redistribute-connected-routes)
+         * [Configure Point-To-Point Interface](#configure-point-to-point-interface)
+         * [Configure SVI](#configure-svi)
+         * [Configure Access Port](#configure-access-port)
+         * [Configure BGP Neighbor](#configure-bgp-neighbor)
+
+
 ## Setup
 
 ### PyangBind
