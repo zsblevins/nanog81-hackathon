@@ -88,3 +88,167 @@ This API is supposed to create a new SVI on the TOR. As mentioned before, this c
 
 ### Edit Access Port
 This API modifies the access vlan on the given port and sets a new interface description if provided.
+
+## OpenConfig gNMIc Examples
+
+### Configure BGP ASN
+
+```bash
+gnmic --log -a 192.168.123.2:6030 -u admin -p admin --insecure set --update-path /network-instances/network-instance[name=default]/protocols/protocol[name=BGP]/bgp/global/config --update-file bgp_as.json
+
+cat bgp_as.json
+{
+    "openconfig-bgp:as": 64512
+}
+```
+
+### Redistribute Connected Routes
+
+```bash
+gnmic --log -a 192.168.123.2:6030 -u admin -p admin --insecure set --update-path network-instances/network-instance[name=default]/table-connections/ --update-file redist.json
+
+cat redist.json
+{
+    "openconfig-network-instance:table-connection": [
+        {
+            "src-protocol": "openconfig-policy-types:DIRECTLY_CONNECTED",
+            "dst-protocol": "openconfig-policy-types:BGP",
+            "address-family": "openconfig-types:IPV4",
+            "config": {
+                "src-protocol": "openconfig-policy-types:DIRECTLY_CONNECTED",
+                "address-family": "openconfig-types:IPV4",
+                "dst-protocol": "openconfig-policy-types:BGP"
+            }
+        },
+        {
+            "src-protocol": "openconfig-policy-types:DIRECTLY_CONNECTED",
+            "dst-protocol": "openconfig-policy-types:BGP",
+            "address-family": "openconfig-types:IPV6",
+            "config": {
+                "src-protocol": "openconfig-policy-types:DIRECTLY_CONNECTED",
+                "address-family": "openconfig-types:IPV6",
+                "dst-protocol": "openconfig-policy-types:BGP"
+            }
+        }
+    ]
+}
+```
+
+### Configure Point-To-Point Interface
+```bash
+gnmic --log -a 192.168.123.2:6030 -u admin -p admin --insecure set --update-path /interfaces/interface[name=Ethernet1] --update-file eth1.json
+
+cat eth1.json
+{
+    "openconfig-interfaces:name": "Ethernet1",
+    "openconfig-interfaces:config": {
+        "name": "Ethernet1",
+        "description": "core-rtr2 Ethernet1",
+        "enabled": true
+    },
+    "openconfig-interfaces:subinterfaces": {
+        "subinterface": [
+            {
+                "index": "0",
+                "config": {
+                    "enabled": true
+                },
+                "openconfig-if-ip:ipv4": {
+                    "addresses": {
+                        "address": [
+                            {
+                                "ip": "10.0.0.0",
+                                "config": {
+                                    "ip": "10.0.0.0",
+                                    "prefix-length": 31,
+                                    "arista-intf-augments:addr-type": "PRIMARY"
+                                }
+                            }
+                        ]
+                    },
+                    "config": {
+                        "enabled": true
+                    }
+                }
+            }
+        ]
+    }
+}
+```
+
+### Configure SVI
+
+```bash
+gnmic --log -a 192.168.123.4:6030 -u admin -p admin --insecure set --update-path /interfaces/interface[name=Vlan101] --update-file v101.json
+
+cat v101.json
+{
+    "openconfig-interfaces:name": "Vlan101",
+    "openconfig-interfaces:config": {
+        "name": "Vlan101",
+        "type": "iana-if-type:l3ipvlan",
+        "description": "prod-1",
+        "enabled": true
+    },
+    "openconfig-vlan:routed-vlan": {
+        "config": {
+            "vlan": "Vlan101"
+        },
+        "openconfig-if-ip:ipv4": {
+            "addresses": {
+                "address": [
+                    {
+                        "ip": "11.0.1.1",
+                        "config": {
+                            "ip": "11.0.1.1",
+                            "prefix-length": 24,
+                            "arista-intf-augments:addr-type": "PRIMARY"
+                        }
+                    }
+                ]
+            },
+            "config": {
+                "enabled": true
+            }
+        }
+    }
+}
+```
+
+### Configure Access Port
+```bash
+gnmic --log -a 192.168.123.4:6030 -u admin -p admin --insecure set --update-path /interfaces/interface[name=Ethernet9] --update-file eth9.json
+
+cat eth9.json
+{
+    "openconfig-interfaces:name": "Ethernet9",
+    "openconfig-interfaces:config": {
+        "name": "Ethernet9",
+        "description": "host1",
+        "enabled": true
+    },
+    "openconfig-if-ethernet:ethernet": {
+        "openconfig-vlan:switched-vlan": {
+            "config": {
+                "access-vlan": 101
+            }
+        }
+    }
+}
+```
+
+### Configure BGP Neighbor
+```bash
+gnmic --log -a 192.168.123.2:6030 -u admin -p admin --insecure set --update-path /network-instances/network-instance[name=default]/protocols/protocol[name=BGP]/bgp/neighbors/neighbor[neighbor-address=10.0.0.1] --update-file bgp_nei.json
+
+cat bgp_nei.json
+{
+    "openconfig-bgp:neighbor-address": "10.0.0.1",
+    "openconfig-bgp:config": {
+        "neighbor-address": "10.0.0.1",
+        "enabled": true,
+        "peer-as": 64512,
+        "description": "core-rtr2"
+    }
+}
+```
