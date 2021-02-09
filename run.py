@@ -9,12 +9,13 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 if __name__ == "__main__":
-    os.remove('/tmp/hackathon.db')
+    if os.path.exists('/tmp/hackathon.db'):
+        os.remove('/tmp/hackathon.db')
     create_database(engine.url)
     from hackathon.models.device import DeviceModel, ConfigModel  # noqa
 
     Base.metadata.create_all(bind=engine)
 
     # Initialize lab
-    initialize_lab(True)
+    initialize_lab()
     app.run(debug=True, port=8000)
